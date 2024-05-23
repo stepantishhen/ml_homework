@@ -1,3 +1,5 @@
 .idea/
 .ipynb_checkpoints/
 .venv/
+/data/1/
+/trainer.yml

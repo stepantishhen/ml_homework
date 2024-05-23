@@ -1,184 +1,93 @@
 import pygame
-import math
 
-# Экран
-WIDTH, HEIGHT = 800, 600
+
+def dist(point1, point2):
+    return ((point1[0] - point2[0]) ** 2 + (point1[1] - point2[1]) ** 2) ** 0.5
+
+
+def region_query(data, point, eps):
+    neighbors = []
+    for neighbor in data:
+        if dist(point, neighbor) < eps:
+            neighbors.append(neighbor)
+    return neighbors
+
+
+def expand_cluster(data, point, neighbors, cluster_id, eps, min_pts, labels):
+    labels[data.index(point)] = cluster_id
+    for neighbor in neighbors:
+        if labels[data.index(neighbor)] == -1:
+            labels[data.index(neighbor)] = cluster_id
+            new_neighbors = region_query(data, neighbor, eps)
+            if len(new_neighbors) >= min_pts:
+                neighbors += new_neighbors
+        elif labels[data.index(neighbor)] == 0:
+            labels[data.index(neighbor)] = cluster_id
+
+
+def dbscan(data, eps, min_pts):
+    cluster_id = 0
+    labels = [0] * len(data)
+    for point in data:
+        if labels[data.index(point)] == 0:
+            neighbors = region_query(data, point, eps)
+            if len(neighbors) < min_pts:
+                labels[data.index(point)] = -1
+            else:
+                cluster_id += 1
+                expand_cluster(data, point, neighbors, cluster_id, eps, min_pts, labels)
+    return labels
+
+
+def add_color(color):
+    coloring = WHITE
+    if color == -1:
+        coloring = RED
+    else:
+        coloring[color % 3] = color * 15
+
+    return coloring
+
+
+WIDTH = 360
+HEIGHT = 480
 FPS = 30
-
-# Цвета
+WHITE = [255, 255, 255]
 BLACK = (0, 0, 0)
-WHITE = (255, 255, 255)
-GREEN = (0, 255, 0)
-YELLOW = (255, 255, 0)
 RED = (255, 0, 0)
-
-# Настройки DBSCAN
-EPS = 40
-MIN_PTS = 5
-
-
-# Класс точки
-class Point:
-    def __init__(self, x, y):
-        self.x = x
-        self.y = y
-        self.color = BLACK
-        self.cluster = -1
-
-    def distance(self, point2):
-        return math.sqrt((self.x - point2.x)**2 + (self.y - point2.y)**2)
-
-
-# Класс DBSCAN
-# class DBSCAN:
-#     def __init__(self, eps, minPts):
-#         self.eps = eps
-#         self.minPts = minPts
-#
-#     def fit(self, data):
-#         markers = [0] * len(data)
-#         cluster_id = 1
-#
-#         for i in range(len(data)):
-#             if markers[i] != 0:
-#                 continue
-#
-#             neighbors = self.get_neighbors(data, i)
-#             if len(neighbors) < self.minPts:
-#                 markers[i] = -1
-#                 continue
-#
-#             self.expand_cluster(data, i, neighbors, markers, cluster_id)
-#             cluster_id += 1
-#
-#         return markers
-#
-#     def get_neighbors(self, data, i):
-#         neighbors = []
-#         for j in range(len(data)):
-#             if i == j:
-#                 continue
-#             if self.distance(data[i], data[j]) <= self.eps:
-#                 neighbors.append(j)
-#         return neighbors
-#
-#     def expand_cluster(self, data, i, neighbors, markers, cluster_id):
-#         markers[i] = cluster_id
-#         for j in neighbors:
-#             if markers[j] == -1:
-#                 markers[j] = cluster_id
-#             elif markers[j] == 0:
-#                 markers[j] = cluster_id
-#                 new_neighbors = self.get_neighbors(data, j)
-#                 if len(new_neighbors) >= self.minPts:
-#                     neighbors.extend(new_neighbors)
-#
-#     def distance(self, a, b):
-#         dx = a.x - b.x
-#         dy = a.y - b.y
-#         return math.sqrt(dx * dx + dy * dy)
-#
-#     def get_marker(self, clusters):
-#         markers = [-1] * len(clusters)
-#
-#         for j in range(len(clusters)):
-#             for k in range(len(clusters[j])):
-#                 if not clusters[j]:
-#                     continue
-#
-#                 if clusters[j][k] == -1:
-#                     markers[j] = clusters[j][k]
-#                 else:
-#                     markers[clusters[j][k]] = j
-#
-#         return markers
-
-
-# Настройка pygame
+GREEN = (0, 255, 0)
+BLUE = (0, 0, 255)
+color = [RED, GREEN, BLUE, WHITE, ]
 pygame.init()
+pygame.mixer.init()
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
+pygame.display.set_caption("My Game")
 clock = pygame.time.Clock()
-
-# Точки
 points = []
+eps, min_pts = 40, 5
 
-# Работа с точками
 running = True
-adding_points = False
-marking_points = False
-markers = [-1] * len(points)
+
 while running:
-    # События
+    clock.tick(FPS)
     for event in pygame.event.get():
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            if event.button == 1:
+                point = event.pos
+                points.append(point)
+                pygame.draw.circle(screen, WHITE, point, 5)
+                # print(points)
+
         if event.type == pygame.QUIT:
             running = False
-        elif event.type == pygame.MOUSEBUTTONDOWN:
-            if event.button == 1:
-                adding_points = True
-            elif event.button == 3:
-                marking_points = True
-        elif event.type == pygame.MOUSEBUTTONUP:
-            if event.button == 1:
-                adding_points = False
-            elif event.button == 3:
-                marking_points = False
-        elif event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_ENTER:
-                clusters = []
-                for i in range(len(points)):
-                    if markers[i] == -1:
-                        new_cluster = [i]
-                        cluster_id = len(clusters) + 1
-                        markers[i] = cluster_id
-                        clusters.append(new_cluster)
-                        neighbors = [j for j in range(len(points)) if j != i and points[i].distance(points[j]) <= EPS]
-                        if len(neighbors) >= MIN_PTS:
-                            for j in neighbors:
-                                if markers[j] == -1:
-                                    new_cluster.append(j)
-                                    markers[j] = cluster_id
-                                    for j in range(len(clusters)):
-                                        for k in range(len(clusters[j])):
-                                            if not clusters[j]:
-                                                continue
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_e:
+                labels = dbscan(points, eps, min_pts)
+                print(labels, points)
+                # Отрисовка точек на экране с учетом кластеров
+                for point, label in zip(points, labels):
+                    color = add_color(label)
+                    pygame.draw.circle(screen, color, point, 5)
 
-                                            if clusters[j][k] == -1:
-                                                markers[j] = clusters[j][k]
-                                            else:
-                                                markers[clusters[j][k]] = j
-                                    for i in range(len(points)):
-                                        if markers[i] == -1:
-                                            points[i].color = RED
-                                        else:
-                                            points[i].cluster = markers[i]
-                                            points[i].color = GREEN
-
-                                        # Добавление точек
-                                    if adding_points:
-                                        x, y = pygame.mouse.get_pos()
-                                        points.append(Point(x, y))
-                                        markers.append(-1)
-
-                                        # Маркировка точек
-                                    if marking_points:
-                                        x, y = pygame.mouse.get_pos()
-                                        for i in range(len(points)):
-                                            if points[i].distance((x, y)) <= 5:
-                                                if markers[i] == -1:
-                                                    markers[i] = 0
-                                                elif markers[i] == 0:
-                                                    markers[i] = -1
-
-                                        # Отрисовка
-                                    screen.fill(BLACK)
-                                    for point in points:
-                                        pygame.draw.circle(screen, point.color, (point.x, point.y), 3)
-
-                                    # Обновление экрана
-                                    pygame.display.update()
-
-                                    # FPS
-                                    clock.tick(FPS)
-
-                            # Закрытие pygame
-                            pygame.quit()
+        pygame.display.flip()
+pygame.quit()
